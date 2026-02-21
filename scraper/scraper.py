@@ -1,7 +1,9 @@
+import argparse
 import os
+import sys
 import pandas as pd
 from mobfot import MobFot
-from config import TEAM_ID
+from config import TEAM_ID, SUPABASE_SCHEMA, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL
 
 client = MobFot()
 _active_progress_prefix = None
@@ -271,10 +273,42 @@ def save_csv(df, filename):
     return True
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Fetch FotMob team data and export CSV files."
+    )
+    parser.add_argument(
+        "--sync-supabase",
+        action="store_true",
+        help="Also sync scraped data to Supabase.",
+    )
+    return parser.parse_args()
+
+
+def validate_supabase_env():
+    missing = []
+    if not SUPABASE_URL:
+        missing.append("SUPABASE_URL")
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        missing.append("SUPABASE_SERVICE_ROLE_KEY")
+    return missing
+
+
 def main():
+    args = parse_args()
+
     if not TEAM_ID:
         print("Error: TEAM_ID not set in .env file")
-        return
+        return 1
+
+    if args.sync_supabase:
+        missing_vars = validate_supabase_env()
+        if missing_vars:
+            print(
+                "Error: --sync-supabase requires env vars: "
+                + ", ".join(missing_vars)
+            )
+            return 1
 
     print(f"Fetching data for team ID: {TEAM_ID}\n")
 
@@ -300,8 +334,44 @@ def main():
     transfers_df = parse_transfers(team_data)
     save_csv(transfers_df, "transfers")
 
+    dataframes = {
+        "fixtures": fixtures_df,
+        "squad": squad_df,
+        "player_stats": stats_df,
+        "team_info": team_info_df,
+        "league_table": table_df,
+        "transfers": transfers_df,
+    }
+
+    if args.sync_supabase:
+        try:
+            source_team_id = int(TEAM_ID)
+        except ValueError:
+            print("Error: TEAM_ID must be an integer for Supabase sync")
+            return 1
+
+        print("\nSyncing data to Supabase...")
+        try:
+            from supabase_sync import sync_to_supabase
+
+            sync_summary = sync_to_supabase(
+                dataframes=dataframes,
+                source_team_id=source_team_id,
+                supabase_url=SUPABASE_URL,
+                supabase_service_role_key=SUPABASE_SERVICE_ROLE_KEY,
+                schema=SUPABASE_SCHEMA,
+            )
+        except Exception as exc:
+            print(f"Error: Supabase sync failed: {exc}")
+            return 1
+
+        for table_name, result in sync_summary.items():
+            label = format_label(table_name)
+            print(f"  ✓ {label} synced: {result['inserted_rows']} rows")
+
     print(f"\nDone! Data saved to: data/")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -21,6 +21,8 @@ All generated CSVs are written to `data/`.
 
 - `scraper/scraper.py`: main scraping/export script
 - `scraper/config.py`: loads `.env` values
+- `scraper/supabase_sync.py`: optional Supabase sync logic
+- `supabase/schema.sql`: SQL schema for Supabase Query Editor
 - `data/`: generated CSV output
 - `client/`: Svelte + Vite frontend
 
@@ -49,10 +51,24 @@ Set your team:
 TEAM_ID=9773
 ```
 
+Optional Supabase sync env vars:
+
+```env
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_SCHEMA=public
+```
+
 ## Run Scraper
 
 ```bash
 python3 scraper/scraper.py
+```
+
+Optional: sync to Supabase in the same run:
+
+```bash
+python3 scraper/scraper.py --sync-supabase
 ```
 
 Expected outputs:
@@ -74,9 +90,15 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+## Supabase Schema
+
+Run `supabase/schema.sql` in Supabase Query Editor before using `--sync-supabase`.
+Default schema used by the scraper is `public`.
+
 ## Dependencies
 
 - [`mobfot`](https://pypi.org/project/mobfot/)
 - `pandas`
 - `python-dotenv`
+- `supabase`
 - Svelte + Vite
