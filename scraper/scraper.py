@@ -8,6 +8,88 @@ from config import TEAM_ID, SUPABASE_SCHEMA, SUPABASE_SERVICE_ROLE_KEY, SUPABASE
 client = MobFot()
 _active_progress_prefix = None
 
+OUTPUT_COLUMNS = {
+    "fixtures": [
+        "id",
+        "page_url",
+        "opponent",
+        "opponent_id",
+        "home_away",
+        "display_tournament",
+        "tournament",
+        "tournament_id",
+        "round",
+        "result",
+        "not_started",
+        "status",
+    ],
+    "squad": [
+        "id",
+        "name",
+        "position_group",
+        "position",
+        "shirt_number",
+        "country_code",
+        "country",
+        "height",
+        "age",
+        "date_of_birth",
+        "rating",
+        "goals",
+        "assists",
+        "yellow_cards",
+        "red_cards",
+        "market_value",
+    ],
+    "player_stats": [
+        "category",
+        "category_display",
+        "player_id",
+        "player_name",
+        "player_country",
+        "team_id",
+        "team_name",
+        "rank",
+        "value",
+        "format",
+    ],
+    "team_info": [
+        "team_id",
+        "team_name",
+        "team_short_name",
+        "season",
+        "selected_season",
+    ],
+    "league_table": [
+        "league",
+        "position",
+        "team_id",
+        "team_name",
+        "played",
+        "wins",
+        "draws",
+        "losses",
+        "goals_for",
+        "goals_against",
+        "goal_difference",
+        "points",
+    ],
+    "transfers": [
+        "type",
+        "player_id",
+        "player_name",
+        "position",
+        "from_club",
+        "from_club_id",
+        "to_club",
+        "to_club_id",
+        "transfer_date",
+        "fee",
+        "market_value",
+        "on_loan",
+    ],
+}
+
 def get_team_data(team_id):
     print("Fetching team data...")
     return client.get_team(team_id)
@@ -260,15 +342,17 @@ def parse_transfers(team_data):
 
 def save_csv(df, filename):
     label = format_label(filename)
-    if df.empty:
-        print(f"  ⚠ No data for {label}")
-        return False
-
     output_dir = "data"
     os.makedirs(output_dir, exist_ok=True)
 
     filepath = os.path.join(output_dir, f"{filename}.csv")
-    df.to_csv(filepath, index=False)
+    export_df = df.reindex(columns=OUTPUT_COLUMNS.get(filename, list(df.columns)))
+    export_df.to_csv(filepath, index=False)
+
+    if export_df.empty:
+        print(f"  ⚠ No data for {label}; wrote empty file: {filepath}")
+        return False
+
     print(f"  ✓ {label} saved: {filepath}")
     return True
 
