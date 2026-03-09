@@ -1,238 +1,128 @@
 <script>
-  export let data = []
+  import { formatMarketValue } from './csv.js'
 
-  function normalizeType(type) {
-    const value = String(type || '').toLowerCase()
-    if (value.includes('in')) return 'in'
-    if (value.includes('out')) return 'out'
-    if (value.includes('contract')) return 'extension'
-    return 'other'
-  }
+  export let data = []
 
   function formatDate(value) {
     if (!value) return '-'
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return value
-    return date.toISOString().slice(0, 10)
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return value
+    return d.toISOString().slice(0, 10)
   }
 
-  function formatMarketValue(value) {
-    if (value === undefined || value === null || value === '') return '-'
-    const numeric = Number(value)
-    if (Number.isNaN(numeric)) return value
-    if (numeric >= 1000000) return `€${(numeric / 1000000).toFixed(1)}M`
-    if (numeric >= 1000) return `€${Math.round(numeric / 1000)}K`
-    return `€${numeric}`
+  function timestamp(value) {
+    if (!value) return 0
+    const t = new Date(value).getTime()
+    return Number.isFinite(t) ? t : 0
+  }
+
+  function normalizeType(type) {
+    const v = String(type || '').toLowerCase()
+    if (v.includes('in'))       return 'in'
+    if (v.includes('out'))      return 'out'
+    if (v.includes('contract')) return 'extension'
+    return 'other'
   }
 
   function formatFee(transfer) {
-    const rawFee = String(transfer.fee || '').trim().toLowerCase()
-    if (rawFee.includes('loan') || String(transfer.on_loan).toLowerCase() === 'true') return 'Loan'
-    if (rawFee.includes('free')) return 'Free'
-    if (rawFee === 'fee') return formatMarketValue(transfer.market_value)
-    if (rawFee) return transfer.fee
-    return '-'
+    if (transfer.fee_value) return formatMarketValue(transfer.fee_value)
+    const fee = String(transfer.fee || '').trim()
+    return fee || '-'
   }
 
   function sortByDateDesc(list) {
-    return [...list].sort((a, b) => {
-      const aTime = a.transfer_date ? new Date(a.transfer_date).getTime() : 0
-      const bTime = b.transfer_date ? new Date(b.transfer_date).getTime() : 0
-      return bTime - aTime
-    })
+    return [...list].sort((a,b) => timestamp(b.transfer_date) - timestamp(a.transfer_date))
   }
 
-  $: transfersIn = sortByDateDesc(data.filter(t => normalizeType(t.type) === 'in'))
-  $: transfersOut = sortByDateDesc(data.filter(t => normalizeType(t.type) === 'out'))
-  $: extensions = sortByDateDesc(data.filter(t => normalizeType(t.type) === 'extension'))
-  $: hasTransfers = transfersIn.length > 0 || transfersOut.length > 0 || extensions.length > 0
+  $: transfersIn  = sortByDateDesc((data || []).filter(t => normalizeType(t.type) === 'in'))
+  $: transfersOut = sortByDateDesc((data || []).filter(t => normalizeType(t.type) === 'out'))
+  $: extensions   = sortByDateDesc((data || []).filter(t => normalizeType(t.type) === 'extension'))
 </script>
 
-<div class="transfers">
-  {#if !hasTransfers}
-    <p class="empty">No transfer data available</p>
-  {:else}
-    {#if transfersIn.length > 0}
-      <section>
-        <h3>Incoming</h3>
-        <table>
-          <colgroup>
-            <col class="col-date" />
-            <col class="col-player" />
-            <col class="col-club" />
-            <col class="col-fee" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="th-date">Date</th>
-              <th>Player</th>
-              <th class="th-club">From</th>
-              <th class="th-fee">Fee</th>
-            </tr>
-          </thead>
-          <tbody>
-          {#each transfersIn as transfer}
-            <tr>
-              <td class="th-date">{formatDate(transfer.transfer_date)}</td>
-              <td class="name">{transfer.player_name || '-'}</td>
-              <td class="th-club">{transfer.from_club || '-'}</td>
-              <td class="th-fee">{formatFee(transfer)}</td>
-            </tr>
-          {/each}
-          </tbody>
-        </table>
-      </section>
-    {/if}
+<div class="transfer-layout">
 
-    {#if transfersOut.length > 0}
-      <section>
-        <h3>Outgoing</h3>
-        <table>
-          <colgroup>
-            <col class="col-date" />
-            <col class="col-player" />
-            <col class="col-club" />
-            <col class="col-fee" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="th-date">Date</th>
-              <th>Player</th>
-              <th class="th-club">To</th>
-              <th class="th-fee">Fee</th>
-            </tr>
-          </thead>
-          <tbody>
-          {#each transfersOut as transfer}
-            <tr>
-              <td class="th-date">{formatDate(transfer.transfer_date)}</td>
-              <td class="name">{transfer.player_name || '-'}</td>
-              <td class="th-club">{transfer.to_club || '-'}</td>
-              <td class="th-fee">{formatFee(transfer)}</td>
-            </tr>
-          {/each}
-          </tbody>
-        </table>
-      </section>
+  <!-- Incoming -->
+  <section class="transfer-column">
+    <div class="column-head">
+      <div>
+        <span class="eyebrow">Arrivals</span>
+        <h3>{transfersIn.length} incoming</h3>
+      </div>
+    </div>
+    {#if transfersIn.length === 0}
+      <p class="empty">No incoming transfers</p>
+    {:else}
+      {#each transfersIn as transfer}
+        <article class="transfer-card in">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+            <div>
+              <strong>{transfer.player_name || '-'}</strong>
+              <small style="display:block;color:var(--text-2);">{transfer.position || '-'} · from {transfer.from_club || '-'}</small>
+            </div>
+            <b style="white-space:nowrap;font-size:0.82rem;">{formatFee(transfer)}</b>
+          </div>
+          <div style="margin-top:0.35rem;font-size:0.73rem;color:var(--text-3);">
+            {formatDate(transfer.transfer_date)} · {transfer.transfer_type_text || transfer.fee || '-'}
+          </div>
+        </article>
+      {/each}
     {/if}
+  </section>
 
-    {#if extensions.length > 0}
-      <section>
-        <h3>Contract Extensions</h3>
-        <table>
-          <colgroup>
-            <col class="col-date" />
-            <col class="col-player-only" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="th-date">Date</th>
-              <th>Player</th>
-            </tr>
-          </thead>
-          <tbody>
-          {#each extensions as transfer}
-            <tr>
-              <td class="th-date">{formatDate(transfer.transfer_date)}</td>
-              <td class="name">{transfer.player_name || '-'}</td>
-            </tr>
-          {/each}
-          </tbody>
-        </table>
-      </section>
+  <!-- Outgoing -->
+  <section class="transfer-column">
+    <div class="column-head">
+      <div>
+        <span class="eyebrow">Departures</span>
+        <h3>{transfersOut.length} outgoing</h3>
+      </div>
+    </div>
+    {#if transfersOut.length === 0}
+      <p class="empty">No outgoing transfers</p>
+    {:else}
+      {#each transfersOut as transfer}
+        <article class="transfer-card out">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+            <div>
+              <strong>{transfer.player_name || '-'}</strong>
+              <small style="display:block;color:var(--text-2);">{transfer.position || '-'} · to {transfer.to_club || '-'}</small>
+            </div>
+            <b style="white-space:nowrap;font-size:0.82rem;">{formatFee(transfer)}</b>
+          </div>
+          <div style="margin-top:0.35rem;font-size:0.73rem;color:var(--text-3);">
+            {formatDate(transfer.transfer_date)} · {transfer.transfer_type_text || transfer.fee || '-'}
+          </div>
+        </article>
+      {/each}
     {/if}
-  {/if}
+  </section>
+
+  <!-- Extensions -->
+  <section class="transfer-column">
+    <div class="column-head">
+      <div>
+        <span class="eyebrow">Renewals</span>
+        <h3>{extensions.length} extensions</h3>
+      </div>
+    </div>
+    {#if extensions.length === 0}
+      <p class="empty">No contract extensions</p>
+    {:else}
+      {#each extensions as transfer}
+        <article class="transfer-card extension">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+            <div>
+              <strong>{transfer.player_name || '-'}</strong>
+              <small style="display:block;color:var(--text-2);">{transfer.position || '-'}</small>
+            </div>
+            <b style="white-space:nowrap;font-size:0.82rem;">{transfer.to_date ? `Until ${formatDate(transfer.to_date)}` : '-'}</b>
+          </div>
+          <div style="margin-top:0.35rem;font-size:0.73rem;color:var(--text-3);">
+            {formatDate(transfer.transfer_date)}
+          </div>
+        </article>
+      {/each}
+    {/if}
+  </section>
+
 </div>
-
-<style>
-  .empty {
-    color: #666;
-    text-align: center;
-    padding: 4rem;
-  }
-
-  h3 {
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    color: #666;
-    margin-bottom: 0.75rem;
-    letter-spacing: 0.1em;
-  }
-
-  section {
-    margin-bottom: 2rem;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-size: 0.9rem;
-  }
-
-  .col-date {
-    width: 11ch;
-  }
-
-  .col-player {
-    width: 38%;
-  }
-
-  .col-club {
-    width: auto;
-  }
-
-  .col-fee {
-    width: 10ch;
-  }
-
-  .col-player-only {
-    width: auto;
-  }
-
-  th {
-    text-align: left;
-    padding: 0.5rem;
-    color: #666;
-    font-weight: 500;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid #222;
-    white-space: nowrap;
-  }
-
-  td {
-    padding: 0.5rem;
-    border-bottom: 1px solid #1a1a1a;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .name {
-    color: #fff;
-    font-weight: 500;
-  }
-
-  .th-date {
-    color: #888;
-  }
-
-  .th-club {
-    color: #bbb;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .th-fee {
-    text-align: right;
-    color: #e0e0e0;
-    font-weight: 600;
-  }
-
-  @media (max-width: 700px) {
-    table {
-      font-size: 0.85rem;
-    }
-  }
-</style>
